@@ -10,8 +10,6 @@ A full-featured 3D interactive physics sandbox built with **Babylon.js**, **Type
 - **Dual-Mode Controls**:
   - **Desktop FPS**: Pointer Lock API mouse look, WASD movement, Space to jump, Shift to sprint, crosshair reticle.
   - **WebXR VR Ready**: WebXR Default Experience with teleportation locomotion, controller tracking, ray grab, and near-object hand grab.
-- **GLB 3D Asset Support & Spawner**:
-  - **21 Included Furniture & Room Assets**: Chairs, armchairs, office chairs, stools, sofas, dining/coffee tables, desks, nightstands, double/twin beds, bookcases, closets, doors, full house, and bedroom models.
   - **Asset Spawner Palette (`B` key or HUD button)**: Categorized drawer (Seating, Tables, Beds, Storage, Doors, Rooms) to drop any model into the world on demand.
   - **Direct Drag & Drop**: Drag ANY `.glb` or `.gltf` file from your desktop/file manager directly onto the browser window—it automatically parses the hierarchy, encapsulates it in a Havok physics collider, adds shadows, and drops it right into your sandbox!
   - **Full Physics & VR Interaction**: All loaded GLB models can be picked up, carried, moved, thrown, or walked on!

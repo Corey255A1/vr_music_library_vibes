@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>BabylonJS VR & Desktop Physics Sandbox</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        user-select: none;
+      }
+      html, body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background-color: #0d1117;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+        outline: none;
+      }
+      #crosshair {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 12px;
+        height: 12px;
+        pointer-events: none;
+        z-index: 10;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+      #crosshair::before, #crosshair::after {
+        content: '';
+        position: absolute;
+        background-color: rgba(255, 255, 255, 0.85);
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+      }
+      #crosshair::before {
+        top: 5px;
+        left: 0;
+        width: 12px;
+        height: 2px;
+      }
+      #crosshair::after {
+        top: 0;
+        left: 5px;
+        width: 2px;
+        height: 12px;
+      }
+      #crosshair.targeted::before, #crosshair.targeted::after {
+        background-color: #58a6ff;
+        box-shadow: 0 0 8px #58a6ff;
+      }
+      #crosshair.holding::before, #crosshair.holding::after {
+        background-color: #3fb950;
+        box-shadow: 0 0 8px #3fb950;
+      }
+
+      /* HUD overlay */
+      #hud {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        color: #f0f6fc;
+        pointer-events: none;
+        z-index: 20;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .panel {
+        background: rgba(22, 27, 34, 0.88);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(240, 246, 252, 0.15);
+        border-radius: 8px;
+        padding: 12px 16px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+        max-width: 320px;
+        pointer-events: auto;
+      }
+      .panel h2 {
+        font-size: 15px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #58a6ff;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .key-badge {
+        display: inline-block;
+        background: #30363d;
+        color: #f0f6fc;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-family: monospace;
+        font-weight: 600;
+        border: 1px solid #484f58;
+        box-shadow: 0 1px 0 rgba(0,0,0,0.3);
+      }
+      .control-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+      .btn-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 10px;
+      }
+      .btn-row {
+        display: flex;
+        gap: 6px;
+      }
+      .hud-btn {
+        background: #238636;
+        color: #ffffff;
+        border: none;
+        border-radius: 6px;
+        padding: 7px 12px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s ease, transform 0.05s;
+        flex: 1;
+        text-align: center;
+      }
+      .hud-btn:hover {
+        background: #2ea043;
+      }
+      .hud-btn:active {
+        transform: scale(0.98);
+      }
+      .hud-btn.primary-blue {
+        background: #1f6feb;
+      }
+      .hud-btn.primary-blue:hover {
+        background: #388bfd;
+      }
+      .hud-btn.purple {
+        background: #8957e5;
+      }
+      .hud-btn.purple:hover {
+        background: #a371f7;
+      }
+      .hud-btn.purple.active {
+        background: #a371f7;
+        box-shadow: 0 0 10px #8957e5;
+      }
+      .hud-btn.secondary {
+        background: #21262d;
+        border: 1px solid #30363d;
+      }
+      .hud-btn.secondary:hover {
+        background: #30363d;
+      }
+
+      /* Asset Spawner Drawer */
+      #asset-spawner-modal {
+        position: absolute;
+        top: 16px;
+        left: 350px;
+        bottom: 16px;
+        width: 360px;
+        background: rgba(22, 27, 34, 0.94);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(88, 166, 255, 0.3);
+        border-radius: 12px;
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+        z-index: 30;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      #asset-spawner-modal.open {
+        display: flex;
+      }
+      .modal-header {
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(240, 246, 252, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .modal-header h3 {
+        font-size: 16px;
+        color: #58a6ff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .modal-close-btn {
+        background: transparent;
+        border: none;
+        color: #8b949e;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+      }
+      .modal-close-btn:hover {
+        background: #30363d;
+        color: #f0f6fc;
+      }
+      .category-pills {
+        display: flex;
+        gap: 4px;
+        padding: 8px 14px;
+        overflow-x: auto;
+        border-bottom: 1px solid rgba(240, 246, 252, 0.08);
+      }
+      .cat-pill {
+        background: #21262d;
+        border: 1px solid #30363d;
+        color: #c9d1d9;
+        font-size: 11px;
+        padding: 4px 8px;
+        border-radius: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .cat-pill.active {
+        background: #1f6feb;
+        border-color: #388bfd;
+        color: #ffffff;
+      }
+      .asset-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .asset-item {
+        background: rgba(13, 17, 23, 0.7);
+        border: 1px solid rgba(240, 246, 252, 0.1);
+        border-radius: 8px;
+        padding: 10px 12px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+      .asset-item:hover {
+        background: rgba(56, 139, 253, 0.15);
+        border-color: #58a6ff;
+        transform: translateY(-1px);
+      }
+      .asset-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .asset-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: #f0f6fc;
+      }
+      .asset-sub {
+        font-size: 11px;
+        color: #8b949e;
+      }
+      .asset-spawn-tag {
+        font-size: 11px;
+        background: #238636;
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+
+      /* Pose Inspector Tool Panel */
+      #pose-panel {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        width: 320px;
+        background: rgba(22, 27, 34, 0.94);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(163, 113, 247, 0.4);
+        border-radius: 12px;
+        box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+        z-index: 30;
+        display: none;
+        flex-direction: column;
+        padding: 14px 16px;
+        color: #f0f6fc;
+        gap: 12px;
+        pointer-events: auto;
+      }
+      .pose-select {
+        width: 100%;
+        background: #21262d;
+        border: 1px solid #30363d;
+        color: #f0f6fc;
+        padding: 7px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .pose-select:focus {
+        border-color: #a371f7;
+        box-shadow: 0 0 0 2px rgba(163, 113, 247, 0.25);
+      }
+      .pose-select optgroup {
+        background: #161b22;
+        color: #8b949e;
+        font-weight: 600;
+        font-size: 11px;
+      }
+      .pose-select option {
+        background: #21262d;
+        color: #f0f6fc;
+        font-size: 12px;
+      }
+      #pose-panel.open {
+        display: flex;
+      }
+      .pose-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid rgba(240, 246, 252, 0.1);
+        padding-bottom: 8px;
+      }
+      .pose-header h3 {
+        font-size: 15px;
+        color: #d2a8ff;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .pose-badge {
+        display: inline-block;
+        background: #30363d;
+        color: #58a6ff;
+        padding: 3px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        border: 1px solid #484f58;
+      }
+      .slider-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+      }
+      .slider-row span:first-child {
+        width: 55px;
+        color: #8b949e;
+      }
+      .slider-row input[type="range"] {
+        flex: 1;
+        accent-color: #a371f7;
+      }
+      .slider-val {
+        width: 36px;
+        text-align: right;
+        font-family: monospace;
+        color: #d2a8ff;
+      }
+      .preset-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+      }
+      .preset-btn {
+        background: #21262d;
+        border: 1px solid #30363d;
+        color: #f0f6fc;
+        padding: 6px 8px;
+        border-radius: 6px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-align: center;
+      }
+      .preset-btn:hover {
+        background: #30363d;
+        border-color: #8957e5;
+        color: #d2a8ff;
+      }
+
+      /* Drag and Drop Fullscreen Overlay */
+      #drop-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(13, 17, 23, 0.85);
+        border: 4px dashed #58a6ff;
+        z-index: 100;
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        color: #58a6ff;
+        pointer-events: none;
+      }
+      #drop-overlay.active {
+        display: flex;
+      }
+      #drop-overlay h1 {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+      #drop-overlay p {
+        color: #8b949e;
+        font-size: 16px;
+      }
+
+      /* Toast Notification */
+      #toast-notification {
+        position: absolute;
+        bottom: 24px;
+        right: 24px;
+        background: #1f6feb;
+        color: #ffffff;
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        z-index: 50;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: opacity 0.25s ease, transform 0.25s ease;
+        pointer-events: none;
+      }
+      #toast-notification.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      #pointer-lock-prompt {
+        position: absolute;
+        bottom: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(13, 17, 23, 0.9);
+        color: #c9d1d9;
+        padding: 8px 18px;
+        border-radius: 20px;
+        border: 1px solid #30363d;
+        font-size: 13px;
+        pointer-events: none;
+        z-index: 20;
+        transition: opacity 0.25s ease;
+      }
+      #stats-overlay {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        color: #8b949e;
+        font-size: 12px;
+        font-family: monospace;
+        text-align: right;
+        pointer-events: none;
+        z-index: 20;
+      }
+
+      /* Emby Settings Modal */
+      #emby-modal {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 440px;
+        background: rgba(18, 24, 34, 0.95);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(0, 229, 255, 0.4);
+        border-radius: 12px;
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.8), 0 0 24px rgba(0, 229, 255, 0.2);
+        z-index: 40;
+        display: none;
+        flex-direction: column;
+        padding: 20px 24px;
+        color: #f0f6fc;
+      }
+      #emby-modal.open {
+        display: flex;
+      }
+      .emby-field {
+        margin-bottom: 12px;
+      }
+      .emby-field label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #8b949e;
+        margin-bottom: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .emby-field input {
+        width: 100%;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        padding: 8px 12px;
+        color: #f0f6fc;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.15s;
+      }
+      .emby-field input:focus {
+        border-color: #00e5ff;
+        box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+      }
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        background: rgba(56, 139, 253, 0.15);
+        color: #58a6ff;
+        border: 1px solid rgba(56, 139, 253, 0.3);
+      }
+      .status-pill.online {
+        background: rgba(63, 185, 80, 0.15);
+        color: #3fb950;
+        border-color: rgba(63, 185, 80, 0.4);
+      }
+
+      /* Bottom Floating Music Player HUD */
+      #music-player-hud {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(13, 18, 28, 0.92);
+        backdrop-filter: blur(14px);
+        border: 1px solid rgba(0, 229, 255, 0.35);
+        border-radius: 28px;
+        padding: 8px 20px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 16px rgba(0, 229, 255, 0.15);
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        z-index: 25;
+        color: #f0f6fc;
+        max-width: 90vw;
+      }
+      #music-cover-thumb {
+        width: 44px;
+        height: 44px;
+        border-radius: 6px;
+        object-fit: cover;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: #161b22;
+      }
+      .music-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 140px;
+        max-width: 220px;
+        overflow: hidden;
+      }
+      .music-title {
+        font-size: 13px;
+        font-weight: 700;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+        color: #ffffff;
+      }
+      .music-artist {
+        font-size: 11px;
+        color: #00e5ff;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
+      }
+      .music-controls {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .music-btn {
+        background: transparent;
+        border: 1px solid #30363d;
+        color: #f0f6fc;
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        font-size: 14px;
+        transition: all 0.15s ease;
+      }
+      .music-btn:hover {
+        background: #00e5ff;
+        border-color: #00e5ff;
+        color: #000;
+        transform: scale(1.08);
+      }
+      .music-btn.play-btn {
+        background: #00e5ff;
+        color: #000;
+        border-color: #00e5ff;
+        width: 36px;
+        height: 36px;
+        font-size: 16px;
+      }
+      .music-time {
+        font-size: 11px;
+        font-family: monospace;
+        color: #8b949e;
+        white-space: nowrap;
+      }
+      .shelf-search-input {
+        background: rgba(13, 17, 23, 0.85);
+        border: 1px solid #30363d;
+        border-radius: 14px;
+        padding: 5px 12px;
+        color: #f0f6fc;
+        font-size: 12px;
+        outline: none;
+        width: 180px;
+        transition: border-color 0.15s, width 0.2s;
+      }
+      .shelf-search-input:focus {
+        border-color: #00e5ff;
+        width: 240px;
+        box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="crosshair"></div>
+
+    <div id="hud">
+      <div class="panel">
+        <h2>🎵 Matrix Music Construct</h2>
+        <div class="control-row"><span>Move</span><span><span class="key-badge">W</span> <span class="key-badge">A</span> <span class="key-badge">S</span> <span class="key-badge">D</span></span></div>
+        <div class="control-row"><span>Look</span><span>Mouse</span></div>
+        <div class="control-row"><span>Jump / Sprint</span><span><span class="key-badge">Space</span> / <span class="key-badge">Shift</span></span></div>
+        <div class="control-row"><span>Grab Album</span><span><span class="key-badge">Left Click</span></span></div>
+        <div class="control-row"><span>Rotate Album</span><span><span class="key-badge">Q</span> <span class="key-badge">E</span> / <span class="key-badge">Z</span> <span class="key-badge">C</span></span></div>
+        <div class="control-row"><span>Snap Upright</span><span><span class="key-badge">U</span> or <span class="key-badge">Mid-Click</span></span></div>
+        <div class="control-row"><span>Drop in Altar</span><span><span class="key-badge">Release near Altar</span></span></div>
+        <div class="control-row"><span>Slide Aisles</span><span><span class="key-badge">▲</span> <span class="key-badge">▼</span> <span class="key-badge">◄</span> <span class="key-badge">►</span></span></div>
+        <div class="control-row"><span>Reset Aisles</span><span><span class="key-badge">0</span> or <span class="key-badge">H</span></span></div>
+        <div class="control-row"><span>VR Mode</span><span><span class="key-badge">WebXR Ready 🥽</span></span></div>
+
+        <div class="btn-bar">
+          <div class="btn-row">
+            <button id="btn-open-emby" class="hud-btn primary-blue">🎵 Emby Settings</button>
+            <button id="btn-summon-racks" class="hud-btn secondary">⚡ Summon Racks</button>
+          </div>
+          <button id="btn-snap-upright" class="hud-btn primary-blue">⬆️ Snap Upright (U)</button>
+
+          <!-- Aisle Control Station Quick Navigation -->
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 11px; font-weight: 700; color: #00e5ff; margin-bottom: 6px; letter-spacing: 0.5px;">🎛️ AISLE CONTROL STATION</div>
+            <div class="btn-row" style="margin-bottom: 4px;">
+              <button id="btn-slide-left" class="hud-btn secondary" title="Slide Left">◄ Left</button>
+              <button id="btn-slide-fwd" class="hud-btn secondary" title="Slide Forward">▲ Fwd</button>
+              <button id="btn-slide-back" class="hud-btn secondary" title="Slide Backward">▼ Back</button>
+              <button id="btn-slide-right" class="hud-btn secondary" title="Slide Right">Right ►</button>
+            </div>
+            <div class="btn-row" style="margin-top: 4px;">
+              <button id="btn-slide-reset" class="hud-btn" style="background: #30363d;">🔄 Center Origin</button>
+            </div>
+            <div style="margin-top: 6px;">
+              <select id="hud-genre-select" style="width: 100%; background: #0d1117; border: 1px solid #00e5ff; border-radius: 6px; color: #00e5ff; padding: 6px 10px; font-size: 12px; font-weight: 600; outline: none; cursor: pointer;">
+                <option value="">⚡ Summon Genre Sector...</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-notification">Asset Spawned</div>
+
+    <div id="stats-overlay">
+      <div id="fps-counter">60 FPS</div>
+      <div id="objects-counter">Objects: 0</div>
+      <div id="xr-status">XR: Available</div>
+    </div>
+
+    <!-- Emby Settings Modal -->
+    <div id="emby-modal">
+      <div class="modal-header" style="margin-bottom: 12px; padding: 0 0 10px 0;">
+        <h3 style="color: #00e5ff;">🎵 Emby Music Server</h3>
+        <button id="btn-close-emby" class="modal-close-btn" title="Close">✕</button>
+      </div>
+      <div style="margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 12px; color: #8b949e;">Connection Status:</span>
+        <span id="emby-status-pill" class="status-pill">Offline (Demo Active)</span>
+      </div>
+      <div class="emby-field">
+        <label for="emby-server-url">Server Address / Host</label>
+        <input type="text" id="emby-server-url" placeholder="http://localhost:8096" value="http://localhost:8096" />
+      </div>
+      <div class="emby-field">
+        <label for="emby-api-key">API Key</label>
+        <input type="password" id="emby-api-key" placeholder="Enter Emby API Key..." />
+      </div>
+      <div class="emby-field">
+        <label for="emby-user-id">User ID (Optional)</label>
+        <input type="text" id="emby-user-id" placeholder="Optional User ID" />
+      </div>
+      <div class="btn-row" style="margin-top: 12px;">
+        <button id="btn-test-emby" class="hud-btn secondary">Test Connection</button>
+        <button id="btn-sync-emby" class="hud-btn primary-blue">Sync Library</button>
+      </div>
+    </div>
+
+    <!-- Floating Bottom Music Player HUD -->
+    <div id="music-player-hud">
+      <img id="music-cover-thumb" src="" alt="Album Art" />
+      <div class="music-info">
+        <div id="music-title-text" class="music-title">STANDBY // NO TRACK LOADED</div>
+        <div id="music-artist-text" class="music-artist">SELECT A CARTRIDGE OFF THE SHELF</div>
+      </div>
+      <div class="music-controls">
+        <button id="btn-music-prev" class="music-btn" title="Previous Track">⏮</button>
+        <button id="btn-music-play" class="music-btn play-btn" title="Play / Pause">▶</button>
+        <button id="btn-music-next" class="music-btn" title="Next Track">⏭</button>
+      </div>
+      <div id="music-time-display" class="music-time">00:00 / 00:00</div>
+      <input type="range" id="music-volume-slider" min="0" max="1" step="0.05" value="0.85" style="width: 70px; accent-color: #00e5ff;" title="Volume" />
+      <input type="text" id="music-search-box" class="shelf-search-input" placeholder="🔍 Search shelves..." />
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
